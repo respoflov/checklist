@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- 체크리스트 PWA: 여러 리스트의 할 일을 관리하는 앱. 화면·스타일·로직을 이 파일 하나에 담았다 -->
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
@@ -203,14 +204,17 @@
 <script>
 (function(){
   "use strict";
+  // localStorage 저장 키
   var KEY = "checklist-app-v1";
 
   /* ---------- 저장소 (localStorage 불가 환경은 메모리로 대체) ---------- */
   var memoryStore = null, storageOK = true;
+  // 저장된 원본 문자열을 읽는다. localStorage를 못 쓰는 환경이면 메모리 값을 돌려준다
   function loadRaw(){
     try { return localStorage.getItem(KEY); }
     catch(e){ storageOK = false; return memoryStore; }
   }
+  // 문자열을 저장한다. 실패하면 메모리에 대신 보관하고 저장 불가 상태로 표시한다
   function saveRaw(str){
     try { localStorage.setItem(KEY, str); storageOK = true; }
     catch(e){ storageOK = false; memoryStore = str; }
@@ -218,6 +222,7 @@
 
   /* ---------- 상태 ---------- */
   var state = null;
+  // 처음 실행할 때의 기본 상태 (자동 테마, 빈 "오늘 할 일" 리스트 하나)
   function defaultState(){
     return {
       theme:"auto",
@@ -225,6 +230,7 @@
       lists:[{ id:"l1", name:"오늘 할 일", items:[] }]
     };
   }
+  // 저장된 상태를 불러온다. 없거나 깨져 있으면 기본 상태로 시작한다
   function load(){
     var raw = loadRaw();
     if(!raw){ state = defaultState(); return; }
@@ -235,6 +241,7 @@
     } catch(e){ state = defaultState(); }
   }
   var saveTimer = null;
+  // 상태를 저장하고 화면 하단의 "자동 저장됨 HH:MM" 안내를 갱신한다
   function save(){
     saveRaw(JSON.stringify(state));
     var note = document.getElementById("saveNote");
@@ -247,20 +254,26 @@
       note.className = "save-note warn";
     }
   }
+  // 상태를 바꾼 뒤 부르는 공통 함수: 저장하고 화면 전체를 다시 그린다
   function commit(){ save(); render(); }
 
   /* ---------- 유틸 ---------- */
+  // 리스트·항목에 붙일 고유 id를 만든다
   function uid(){ return "i" + Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
+  // 한 자리 숫자 앞에 0을 붙인다 (예: 7 → "07")
   function two(n){ return (n<10?"0":"")+n; }
+  // 오늘 날짜를 "YYYY-MM-DD" 문자열로 돌려준다 (마감일 비교용)
   function todayStr(){
     var d = new Date();
     return d.getFullYear() + "-" + two(d.getMonth()+1) + "-" + two(d.getDate());
   }
+  // 현재 선택된 리스트를 찾는다. 없으면 첫 리스트를 선택한다
   function activeList(){
     for(var i=0;i<state.lists.length;i++) if(state.lists[i].id===state.activeId) return state.lists[i];
     state.activeId = state.lists[0].id;
     return state.lists[0];
   }
+  // 마감일 상태에 따른 CSS 클래스 (지남: overdue, 오늘: today)
   function dueClass(due, done){
     if(!due || done) return "";
     var t = todayStr();
@@ -268,12 +281,14 @@
     if(due === t) return "today";
     return "";
   }
+  // 마감일 배지에 보일 글자 ("오늘" 또는 "M/D")
   function dueLabel(due){
     var t = todayStr();
     if(due === t) return "오늘";
     var parts = due.split("-");
     return parts[1] + "/" + parts[2];
   }
+  // DOM 요소를 만드는 줄임 함수 (태그, 클래스, 글자)
   function el(tag, cls, text){
     var e = document.createElement(tag);
     if(cls) e.className = cls;
@@ -282,6 +297,7 @@
   }
 
   /* ---------- 테마 ---------- */
+  // 저장된 테마를 화면에 적용한다. auto면 기기의 라이트·다크 설정을 따른다
   function applyTheme(){
     var mode = state.theme;
     if(mode === "auto"){
@@ -289,6 +305,7 @@
     }
     document.documentElement.setAttribute("data-theme", mode);
   }
+  // 테마 버튼: 지금 보이는 테마의 반대로 바꾸고 저장한다
   document.getElementById("themeBtn").addEventListener("click", function(){
     var cur = document.documentElement.getAttribute("data-theme");
     state.theme = (cur === "dark") ? "light" : "dark";
@@ -297,6 +314,7 @@
 
   /* ---------- 사이드바 ---------- */
   var addingList = false;
+  // 왼쪽 사이드바에 리스트 목록과 남은 항목 수, 새 리스트 입력창을 그린다
   function renderSidebar(){
     var nav = document.getElementById("sidebar");
     nav.innerHTML = "";
@@ -327,6 +345,7 @@
       nav.appendChild(add);
     }
   }
+  // 새 리스트 입력을 마무리한다. 이름이 있으면 리스트를 만들고 그 리스트로 이동한다
   function finishAddList(name){
     addingList = false;
     name = (name||"").trim();
@@ -339,6 +358,7 @@
   }
 
   /* ---------- 제목(이름 변경) ---------- */
+  // 리스트 제목을 클릭하면 입력창으로 바꿔 이름을 고치게 한다
   function startRename(){
     var span = document.getElementById("listTitle");
     var list = activeList();
@@ -359,6 +379,7 @@
   }
 
   /* ---------- 항목 렌더링 ---------- */
+  // 현재 리스트의 항목들을 그린다 (체크, 글자 수정, 마감일, 삭제, 드래그 순서 변경)
   function renderItems(){
     var list = activeList();
     var ul = document.getElementById("itemList");
@@ -371,6 +392,7 @@
     }
 
     list.items.forEach(function(item, idx){
+      // 항목 한 줄. 드래그로 순서를 바꿀 수 있다
       var li = el("li","item" + (item.done ? " done" : ""));
       li.draggable = true;
 
@@ -384,6 +406,7 @@
       li.addEventListener("dragleave", function(){ li.classList.remove("drag-over"); });
       li.addEventListener("drop", function(ev){
         ev.preventDefault();
+        // 드래그해서 놓은 위치로 항목을 옮긴다
         var from = parseInt(ev.dataTransfer.getData("text/plain"), 10);
         if(isNaN(from) || from === idx) return;
         var moved = list.items.splice(from, 1)[0];
@@ -436,6 +459,7 @@
         dbtn.addEventListener("click", function(){ openDateEditor(li, item); });
         acts.appendChild(dbtn);
       }
+      // 삭제 버튼은 한 번 누르면 "확인"으로 바뀌고, 한 번 더 눌러야 지운다
       var del = el("button","small-btn danger","삭제");
       del.addEventListener("click", function(){
         if(del.classList.contains("confirming")){ 
@@ -465,6 +489,7 @@
   }
 
   /* 날짜 편집 팝업 */
+  // 항목 아래에 날짜 입력창을 펼쳐 마감일을 바꾸거나 지우게 한다
   function openDateEditor(li, item){
     var old = li.querySelector(".inline-date");
     if(old){ old.remove(); return; }
@@ -483,6 +508,7 @@
   }
 
   /* ---------- 상단/하단 동작 ---------- */
+  // 입력창의 글자와 마감일로 새 항목을 현재 리스트에 추가한다
   function addItem(){
     var t = document.getElementById("newItemText");
     var d = document.getElementById("newItemDue");
@@ -503,6 +529,7 @@
     if(ev.key === "Enter") startRename();
   });
 
+  // 마감일순 정렬: 완료 항목은 아래로, 마감일이 없는 항목은 그 위로 보낸다
   document.getElementById("sortBtn").addEventListener("click", function(){
     activeList().items.sort(function(a,b){
       if(a.done !== b.done) return a.done ? 1 : -1;
@@ -514,17 +541,20 @@
     commit();
   });
 
+  // 전체 해제: 현재 리스트의 모든 체크를 푼다
   document.getElementById("uncheckBtn").addEventListener("click", function(){
     activeList().items.forEach(function(it){ it.done = false; });
     commit();
   });
 
+  // 완료 항목 삭제: 체크된 항목만 지운다
   document.getElementById("clearDoneBtn").addEventListener("click", function(){
     var list = activeList();
     list.items = list.items.filter(function(it){ return !it.done; });
     commit();
   });
 
+  // 리스트 삭제: 한 번 누르면 확인 문구로 바뀌고, 3초 안에 한 번 더 누르면 지운다
   var delBtn = document.getElementById("deleteListBtn");
   delBtn.addEventListener("click", function(){
     if(delBtn.classList.contains("confirming")){
@@ -546,6 +576,7 @@
   });
 
   /* ---------- 백업 ---------- */
+  // 백업 내보내기: 전체 상태를 JSON 파일로 내려받는다
   document.getElementById("exportBtn").addEventListener("click", function(){
     var blob = new Blob([JSON.stringify(state, null, 2)], { type:"application/json" });
     var a = document.createElement("a");
@@ -556,6 +587,7 @@
     a.remove();
     setTimeout(function(){ URL.revokeObjectURL(a.href); }, 1000);
   });
+  // 가져오기: 고른 JSON 파일로 상태를 덮어쓴다
   document.getElementById("importBtn").addEventListener("click", function(){
     document.getElementById("importFile").click();
   });
@@ -581,6 +613,7 @@
   });
 
   /* ---------- 전체 렌더 ---------- */
+  // 화면 전체를 다시 그린다
   function render(){
     renderSidebar();
     renderItems();
@@ -589,6 +622,7 @@
   /* ---------- 시작 ---------- */
   load();
   applyTheme();
+  // 상단에 오늘 날짜를 "YYYY.MM.DD (요일)" 형식으로 표시한다
   var d = new Date();
   var days = ["일","월","화","수","목","금","토"];
   document.getElementById("todayLabel").textContent =
@@ -598,6 +632,7 @@
 })();
 </script>
 <script>
+// HTTPS로 열었을 때만 서비스 워커를 등록해 오프라인 캐시를 켠다
 if ("serviceWorker" in navigator && location.protocol === "https:") {
   window.addEventListener("load", function(){
     navigator.serviceWorker.register("./sw.js");
